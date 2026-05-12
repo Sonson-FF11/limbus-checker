@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宝箱チェッカー</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #ffffff;
+  --bg-secondary: #f5f5f3;
+  --bg-info: #e6f1fb;
+  --bg-warn: #faeeda;
+  --bg-danger: #fcebeb;
+  --bg-success: #e1f5ee;
+  --text: #1a1a18;
+  --text-secondary: #5f5e5a;
+  --text-tertiary: #888780;
+  --text-info: #185fa5;
+  --text-warn: #854f0b;
+  --text-danger: #a32d2d;
+  --text-success: #0f6e56;
+  --border: rgba(0,0,0,0.12);
+  --border-md: rgba(0,0,0,0.22);
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1c;
+    --bg-secondary: #2a2a28;
+    --bg-info: #042c53;
+    --bg-warn: #412402;
+    --bg-danger: #501313;
+    --bg-success: #04342c;
+    --text: #f0efeb;
+    --text-secondary: #b4b2a9;
+    --text-tertiary: #888780;
+    --text-info: #85b7eb;
+    --text-warn: #fac775;
+    --text-danger: #f09595;
+    --text-success: #5dcaa5;
+    --border: rgba(255,255,255,0.12);
+    --border-md: rgba(255,255,255,0.22);
+  }
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg-secondary);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.app { width: 100%; max-width: 480px; }
+
+.screen { display: none; padding: 0.5rem 0; }
+.screen.active { display: block; }
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  padding: 9px 16px;
+  border: 0.5px solid var(--border-md);
+  background: transparent;
+  color: var(--text);
+  transition: background 0.1s, opacity 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+button:hover { background: var(--bg-secondary); }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.35; cursor: default; transform: none; }
+button.primary { background: var(--bg-info); color: var(--text-info); border-color: transparent; }
+button.primary:hover { opacity: 0.85; background: var(--bg-info); }
+button.danger { color: var(--text-danger); }
+button.danger:hover { background: var(--bg-danger); }
+
+input[type="text"] {
+  font-family: var(--font);
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-md);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+input[type="text"]:focus { border-color: #378add; }
+
+/* ===== キャラ選択 ===== */
+.top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+.top-bar h2 { font-size: 18px; font-weight: 500; }
+.badge { font-size: 13px; padding: 4px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-md); color: var(--text-secondary); }
+.badge.hi { background: var(--bg-info); color: var(--text-info); border-color: transparent; font-weight: 500; }
+.char-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.5rem; }
+.char-card { background: var(--bg); border: 0.5px solid var(--border-md); border-radius: var(--radius-lg); padding: 1rem 1.25rem; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: filter 0.12s; }
+.char-card:hover { filter: brightness(0.97); }
+.char-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.char-info { flex: 1; min-width: 0; }
+.char-name { font-size: 15px; font-weight: 500; }
+.char-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.char-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary); font-size: 14px; line-height: 1.8; }
+
+/* ===== フォーム ===== */
+.form-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; }
+.form-header h2 { font-size: 18px; font-weight: 500; }
+.form-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 5px; display: block; }
+.form-group { margin-bottom: 1.25rem; }
+.form-actions { display: flex; gap: 8px; margin-top: 1.5rem; }
+.form-actions button { flex: 1; }
+
+/* ===== チェッカー ===== */
+.ck-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; }
+.ck-title-area { flex: 1; min-width: 0; }
+.ck-title-area h2 { font-size: 16px; font-weight: 500; }
+.game-tabs { display: flex; border-bottom: 0.5px solid var(--border-md); margin-bottom: 1.25rem; }
+.game-tab { font-size: 14px; font-weight: 500; padding: 8px 18px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; font-family: var(--font); }
+.game-tab:hover { color: var(--text); }
+.game-tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+.banner { background: var(--bg-warn); border-radius: var(--radius-md); padding: 8px 14px; margin-bottom: 1.25rem; font-size: 13px; color: var(--text-warn); display: none; }
+
+/* ===== コードバナー ===== */
+.code-banner { border-radius: var(--radius-md); padding: 8px 14px; margin-bottom: 1.25rem; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.code-banner.available { background: var(--bg-success); color: var(--text-success); }
+.code-banner.used { background: var(--bg-secondary); color: var(--text-secondary); }
+.code-banner-text { display: flex; align-items: center; gap: 6px; }
+.code-toggle-btn { font-size: 12px; padding: 4px 12px; white-space: nowrap; }
+
+.mode-indicator { display: none; margin-bottom: 0.75rem; }
+.mode-indicator span { font-size: 12px; padding: 4px 10px; border-radius: var(--radius-md); font-weight: 500; background: var(--bg-success); color: var(--text-success); }
+
+/* ===== 箱グリッド ===== */
+.boxes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+.box-card { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border-md); padding: 1rem 1.25rem; cursor: pointer; user-select: none; transition: filter 0.12s; }
+.box-card:hover { filter: brightness(0.97); }
+.box-card.sel { border: 1.5px solid #378add; }
+.box-card.sel-code { border: 1.5px solid #1d9e75; }
+.box-card.miss { opacity: 0.55; cursor: default; }
+.box-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.box-name { font-size: 16px; font-weight: 500; }
+.box-status { font-size: 12px; padding: 3px 10px; border-radius: var(--radius-md); font-weight: 500; }
+.s-cand { background: var(--bg-success); color: var(--text-success); }
+.s-miss { background: var(--bg-secondary); color: var(--text-secondary); }
+.box-note { font-size: 12px; color: var(--text-secondary); }
+
+.result-actions { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+.result-actions button { flex: 1; }
+
+.advice-card { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+.advice-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.advice-text { font-size: 14px; line-height: 1.6; }
+
+.hist-head { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; }
+.hist-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+.hist-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); padding: 6px 10px; background: var(--bg-secondary); border-radius: var(--radius-md); }
+.hi-r { margin-left: auto; font-weight: 500; }
+.hi-win { color: var(--text-success); }
+.hi-lose { color: var(--text-tertiary); }
+.hi-code { font-size: 11px; color: var(--text-success); }
+.bot-row { margin-top: 1rem; display: flex; justify-content: flex-end; }
+
+/* ===== モーダル ===== */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+.overlay.show { display: flex; }
+.modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border-md); padding: 1.5rem; width: 100%; max-width: 360px; }
+.modal h3 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+.modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6; }
+.prev-lbl { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.prev-boxes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.prev-box { font-size: 12px; padding: 3px 10px; border-radius: var(--radius-md); font-weight: 500; }
+.modal-btns { display: flex; flex-direction: column; gap: 8px; }
+.modal-btns button { width: 100%; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- キャラ選択 -->
+  <div id="screen-select" class="screen active">
+    <div class="top-bar">
+      <h2>宝箱チェッカー</h2>
+      <button onclick="showAdd()">＋ キャラ追加</button>
+    </div>
+    <div class="char-list" id="char-list"></div>
+  </div>
+
+  <!-- キャラ追加・編集 -->
+  <div id="screen-add" class="screen">
+    <div class="form-header">
+      <button onclick="showSelect()">←</button>
+      <h2 id="add-title">キャラクター追加</h2>
+    </div>
+    <div class="form-group">
+      <label class="form-label">キャラクター名</label>
+      <input type="text" id="char-name-input" placeholder="例：メインキャラ、サブキャラ…" maxlength="20">
+    </div>
+    <div class="form-actions">
+      <button onclick="showSelect()">キャンセル</button>
+      <button class="primary" onclick="saveChar()">保存</button>
+    </div>
+  </div>
+
+  <!-- チェッカー -->
+  <div id="screen-checker" class="screen">
+    <div class="ck-header">
+      <button onclick="showSelect()">← 一覧</button>
+      <div class="ck-title-area"><h2 id="ck-char-name"></h2></div>
+      <span class="badge hi" id="ck-rem">5回</span>
+    </div>
+
+    <div class="game-tabs">
+      <button class="game-tab active" id="tab-temenas" onclick="switchGame('temenas')">テメナス</button>
+      <button class="game-tab" id="tab-apolion" onclick="switchGame('apolion')">アポリオン</button>
+    </div>
+
+    <div class="banner" id="ck-banner">▶ 前週の外れ状態を引き継いでいます。</div>
+
+    <div class="code-banner" id="ck-code-banner">
+      <span class="code-banner-text" id="ck-code-text"></span>
+      <button class="code-toggle-btn" id="ck-code-toggle-btn" onclick="toggleCodeMode()"></button>
+    </div>
+
+    <div class="mode-indicator" id="ck-mode-indicator">
+      <span>🔑 コード使用中 — 回数消費なし</span>
+    </div>
+
+    <div class="boxes-grid" id="ck-grid"></div>
+
+    <div class="result-actions">
+      <button id="ck-miss" disabled onclick="record(false)">✗ 外れ</button>
+      <button id="ck-hit" disabled class="primary" onclick="record(true)">✓ 当たり！</button>
+    </div>
+
+    <div class="advice-card">
+      <div class="advice-label">💡 アドバイス</div>
+      <div class="advice-text" id="ck-advice">箱を選択してください。</div>
+    </div>
+
+    <div class="hist-head">結果履歴</div>
+    <div class="hist-list" id="ck-hist"></div>
+
+    <div class="bot-row">
+      <button class="danger" style="font-size:13px;padding:6px 14px" onclick="openModal()">↺ 週リセット</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- リセットモーダル -->
+<div class="overlay" id="reset-overlay">
+  <div class="modal">
+    <h3>週リセット</h3>
+    <p>前週の結果を引き継ぐか、全箱をリセットするか選んでください。</p>
+    <div id="modal-prev"></div>
+    <div class="modal-btns">
+      <button class="primary" id="inherit-btn" onclick="doReset(true)">▶ 前週の外れ状態を引き継ぐ</button>
+      <button onclick="doReset(false)">↺ 全箱リセット</button>
+      <button onclick="closeModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const GAME_CONFIGS = {
+  temenas: { label: 'テメナス', codeName: 'テメナスコード', names: ['北','西','東','中央'], icons: ['↑','←','→','✦'] },
+  apolion: { label: 'アポリオン', codeName: 'アポリオンコード', names: ['NW','SW','NE','SE'], icons: ['↖','↙','↗','↘'] }
+};
+const STORE_KEY = 'treasure_offline_v2';
+let chars = [], currentCharId = null, currentGame = 'temenas', editingId = null, codeMode = false;
+
+function getWeek() {
+  const n = new Date(), s = new Date(n.getFullYear(), 0, 1);
+  return n.getFullYear() + '-W' + Math.ceil(((n - s) / 86400000 + s.getDay() + 1) / 7);
+}
+function freshBoxes(g) {
+  return GAME_CONFIGS[g].names.map((name, i) => ({ name, icon: GAME_CONFIGS[g].icons[i], confirmedMiss: false }));
+}
+function freshGameState(g) {
+  return { week: getWeek(), remaining: 5, boxes: freshBoxes(g), history: [], selected: null, hitThisWeek: false, carriedOver: false, codeUsed: false };
+}
+function freshChar(name) {
+  return { id: Date.now().toString(), name, games: { temenas: freshGameState('temenas'), apolion: freshGameState('apolion') } };
+}
+function load() { try { const r = localStorage.getItem(STORE_KEY); if (r) chars = JSON.parse(r); } catch(e) { chars = []; } }
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(chars)); } catch(e) {} }
+function getChar(id) { return chars.find(c => c.id === id); }
+
+function getState(charId, gameId) {
+  const ch = getChar(charId), week = getWeek();
+  let s = ch.games[gameId];
+  if (!s || s.week !== week) {
+    const co = s && s.remaining === 0 && !s.hitThisWeek;
+    ch.games[gameId] = { week, remaining: 5, boxes: co ? s.boxes.map(b => ({...b})) : freshBoxes(gameId), history: [], selected: null, hitThisWeek: false, carriedOver: co, codeUsed: false };
+    save();
+  }
+  if (ch.games[gameId].codeUsed === undefined) ch.games[gameId].codeUsed = false;
+  return ch.games[gameId];
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+function showSelect() { codeMode = false; showScreen('select'); renderList(); }
+function showAdd(id) {
+  editingId = id || null;
+  document.getElementById('add-title').textContent = id ? 'キャラクター編集' : 'キャラクター追加';
+  document.getElementById('char-name-input').value = id ? getChar(id).name : '';
+  showScreen('add');
+  setTimeout(() => document.getElementById('char-name-input').focus(), 50);
+}
+function showChecker(id) { currentCharId = id; currentGame = 'temenas'; codeMode = false; showScreen('checker'); renderChecker(); }
+
+function renderList() {
+  const el = document.getElementById('char-list');
+  if (!chars.length) {
+    el.innerHTML = '<div class="empty-state">キャラクターがいません。<br>「キャラ追加」で登録してください。</div>';
+    return;
+  }
+  el.innerHTML = chars.map(ch => {
+    const st = getState(ch.id, 'temenas'), sa = getState(ch.id, 'apolion');
+    const tc = st.boxes.filter(b => !b.confirmedMiss).length;
+    const ac = sa.boxes.filter(b => !b.confirmedMiss).length;
+    const tcCode = !st.codeUsed ? ' 🔑' : '';
+    const acCode = !sa.codeUsed ? ' 🔑' : '';
+    return `
+      <div class="char-card" onclick="showChecker('${ch.id}')">
+        <div class="char-avatar">🧑</div>
+        <div class="char-info">
+          <div class="char-name">${ch.name}</div>
+          <div class="char-meta">テメナス 残り${st.remaining}回・候補${tc}箱${tcCode}　／　アポリオン 残り${sa.remaining}回・候補${ac}箱${acCode}</div>
+        </div>
+        <div class="char-actions" onclick="event.stopPropagation()">
+          <button onclick="showAdd('${ch.id}')">編集</button>
+          <button class="danger" onclick="deleteChar('${ch.id}')">削除</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function saveChar() {
+  const name = document.getElementById('char-name-input').value.trim();
+  if (!name) { alert('キャラクター名を入力してください。'); return; }
+  if (editingId) { getChar(editingId).name = name; } else { chars.push(freshChar(name)); }
+  save(); showSelect();
+}
+function deleteChar(id) {
+  if (!confirm('このキャラクターを削除しますか？')) return;
+  chars = chars.filter(c => c.id !== id); save(); renderList();
+}
+
+function switchGame(g) {
+  currentGame = g; codeMode = false;
+  document.getElementById('tab-temenas').classList.toggle('active', g === 'temenas');
+  document.getElementById('tab-apolion').classList.toggle('active', g === 'apolion');
+  closeModal(); renderChecker();
+}
+
+function toggleCodeMode() {
+  const s = getState(currentCharId, currentGame);
+  if (s.codeUsed) return;
+  codeMode = !codeMode;
+  if (codeMode) { s.selected = null; save(); }
+  renderChecker();
+}
+
+function renderChecker() {
+  const ch = getChar(currentCharId), cfg = GAME_CONFIGS[currentGame], s = getState(currentCharId, currentGame);
+  document.getElementById('ck-char-name').textContent = ch.name;
+  document.getElementById('ck-rem').textContent = s.remaining + '回';
+  document.getElementById('ck-banner').style.display = s.carriedOver ? 'block' : 'none';
+
+  const codeBanner = document.getElementById('ck-code-banner');
+  const codeText = document.getElementById('ck-code-text');
+  const codeBtn = document.getElementById('ck-code-toggle-btn');
+  const modeInd = document.getElementById('ck-mode-indicator');
+
+  if (s.codeUsed) {
+    codeBanner.className = 'code-banner used';
+    codeText.textContent = `🔑 ${cfg.codeName}：使用済み`;
+    codeBtn.textContent = '使用済み';
+    codeBtn.disabled = true;
+    modeInd.style.display = 'none';
+    codeMode = false;
+  } else {
+    codeBanner.className = 'code-banner available';
+    codeText.textContent = `🔑 ${cfg.codeName}：未使用`;
+    codeBtn.disabled = false;
+    if (codeMode) {
+      codeBtn.textContent = 'キャンセル';
+      modeInd.style.display = 'block';
+    } else {
+      codeBtn.textContent = 'コードを使う';
+      modeInd.style.display = 'none';
+    }
+  }
+
+  const grid = document.getElementById('ck-grid');
+  grid.innerHTML = '';
+  const canSelect = (!codeMode && s.remaining > 0) || (codeMode && !s.codeUsed);
+  s.boxes.forEach((box, i) => {
+    const card = document.createElement('div');
+    let cls = 'box-card';
+    if (box.confirmedMiss) cls += ' miss';
+    else if (s.selected === i) cls += codeMode ? ' sel-code' : ' sel';
+    card.className = cls;
+    card.innerHTML = `
+      <div class="box-header">
+        <span class="box-name">${box.icon} ${box.name}</span>
+        <span class="box-status ${box.confirmedMiss ? 's-miss' : 's-cand'}">${box.confirmedMiss ? '外れ確定' : '当たり候補'}</span>
+      </div>
+      <div class="box-note">${box.confirmedMiss ? 'このターン選択不可' : '選択可能'}</div>`;
+    if (!box.confirmedMiss && canSelect) card.onclick = () => { s.selected = i; save(); renderChecker(); };
+    grid.appendChild(card);
+  });
+
+  const has = s.selected !== null;
+  const canAct = has && (codeMode ? !s.codeUsed : s.remaining > 0);
+  document.getElementById('ck-hit').disabled = !canAct;
+  document.getElementById('ck-miss').disabled = !canAct;
+
+  const cands = s.boxes.filter(b => !b.confirmedMiss);
+  const adv = document.getElementById('ck-advice');
+  if (codeMode && s.selected === null) {
+    adv.textContent = `${cfg.codeName}使用中。回数を消費せずに箱を開けられます。開けたい箱を選んでください。`;
+  } else if (codeMode && s.selected !== null) {
+    adv.textContent = `「${s.boxes[s.selected].name}」をコードで開けます。回数は消費されません。`;
+  } else if (s.remaining <= 0 && !s.codeUsed) {
+    adv.textContent = `今週の挑戦回数を使い切りました。${cfg.codeName}が未使用です！コードを使って追加挑戦できます。`;
+  } else if (s.remaining <= 0) {
+    adv.textContent = !s.hitThisWeek && s.boxes.some(b => b.confirmedMiss) ? '今週は当たりを引けませんでした。外れ確定の状態は来週に引き継がれます。' : '今週の挑戦回数を使い切りました。週リセットで来週分を開始できます。';
+  } else if (s.selected === null) {
+    adv.textContent = cands.length === 1 ? `当たりは必ず「${cands[0].name}」にあります！迷わず選びましょう。` : `候補は ${cands.map(b => b.name).join('・')} の ${cands.length} 箱です。外れ確定でない箱を狙いましょう。`;
+  } else {
+    const box = s.boxes[s.selected];
+    adv.textContent = cands.length === 1 && cands[0].name === box.name ? `「${box.name}」は唯一の候補です。必ず当たりがあります！` : `「${box.name}」を選択中。当たりなら次回は全箱が候補になります。外れなら他の候補を試しましょう。`;
+  }
+
+  const hist = document.getElementById('ck-hist');
+  hist.innerHTML = s.history.length
+    ? s.history.map(h => `
+      <div class="hist-item">
+        <span>${h.turn}</span>
+        <span style="font-weight:500;color:var(--text)">${h.box}</span>
+        ${h.code ? '<span class="hi-code">🔑</span>' : ''}
+        <span class="hi-r ${h.hit ? 'hi-win' : 'hi-lose'}">${h.hit ? '✓ 当たり' : '✗ 外れ'}</span>
+      </div>`).join('')
+    : '<p style="font-size:13px;color:var(--text-tertiary)">まだ記録がありません。</p>';
+}
+
+function record(isHit) {
+  const s = getState(currentCharId, currentGame);
+  if (s.selected === null) return;
+  if (!codeMode && s.remaining <= 0) return;
+  if (codeMode && s.codeUsed) return;
+  const idx = s.selected;
+  const turnLabel = codeMode ? 'コード使用' : `${6 - s.remaining}回目`;
+  s.history.unshift({ box: s.boxes[idx].name, hit: isHit, turn: turnLabel, code: codeMode });
+  if (codeMode) { s.codeUsed = true; codeMode = false; }
+  else { s.remaining--; }
+  s.selected = null;
+  if (isHit) {
+    s.hitThisWeek = true; s.carriedOver = false;
+    s.boxes.forEach(b => { b.confirmedMiss = false; });
+  } else {
+    s.boxes[idx].confirmedMiss = true;
+    if (!s.boxes.some(b => !b.confirmedMiss)) s.boxes.forEach(b => { b.confirmedMiss = false; });
+  }
+  save(); renderChecker();
+}
+
+function openModal() {
+  const s = getState(currentCharId, currentGame), hasMiss = s.boxes.some(b => b.confirmedMiss);
+  const prev = document.getElementById('modal-prev');
+  if (hasMiss) {
+    const miss = s.boxes.filter(b => b.confirmedMiss).map(b => b.name);
+    const cand = s.boxes.filter(b => !b.confirmedMiss).map(b => b.name);
+    prev.innerHTML = `
+      <div class="prev-lbl">現在の箱の状態</div>
+      <div class="prev-boxes">
+        ${cand.map(n => `<span class="prev-box" style="background:var(--bg-success);color:var(--text-success);">✓ ${n}</span>`).join('')}
+        ${miss.map(n => `<span class="prev-box" style="background:var(--bg-secondary);color:var(--text-secondary);">✗ ${n}</span>`).join('')}
+      </div>`;
+  } else {
+    prev.innerHTML = `<p style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">外れ確定の箱がないため、引き継ぎ情報はありません。</p>`;
+  }
+  document.getElementById('inherit-btn').disabled = !hasMiss;
+  document.getElementById('reset-overlay').classList.add('show');
+}
+function closeModal() { document.getElementById('reset-overlay').classList.remove('show'); }
+function doReset(carryover) {
+  const s = getState(currentCharId, currentGame);
+  const boxes = carryover ? s.boxes.map(b => ({...b})) : freshBoxes(currentGame);
+  getChar(currentCharId).games[currentGame] = {
+    week: getWeek(), remaining: 5, boxes, history: [], selected: null,
+    hitThisWeek: false, carriedOver: carryover && boxes.some(b => b.confirmedMiss), codeUsed: false
+  };
+  codeMode = false; save(); closeModal(); renderChecker();
+}
+
+load(); renderList();
+</script>
+</body>
+</html>
