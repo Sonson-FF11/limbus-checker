@@ -320,8 +320,24 @@ let chars = [], currentCharId = null, currentGame = 'temenas', editingId = null,
 let selectedRace = null;
 
 function getWeek() {
-  const n = new Date(), s = new Date(n.getFullYear(), 0, 1);
-  return n.getFullYear() + '-W' + Math.ceil(((n - s) / 86400000 + s.getDay() + 1) / 7);
+  // 日本時間（UTC+9）の「直近の月曜0:00」を週IDとする。
+  // 端末のタイムゾーン設定に関わらず常にJST基準で週が切り替わる。
+  const nowUtcMs = Date.now();
+  const jstMs = nowUtcMs + 9 * 60 * 60 * 1000;
+  const jst = new Date(jstMs);
+  const dow = jst.getUTCDay(); // 0=日,1=月,...6=土（JSTでの曜日）
+  const diffToMonday = (dow + 6) % 7; // 直近の月曜日までの日数
+  const mondayUtcMs = Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate() - diffToMonday);
+  const monday = new Date(mondayUtcMs);
+  const y = monday.getUTCFullYear();
+  const m = String(monday.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(monday.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`; // 例: "2026-06-29"（その週の月曜日のJST日付）
+}
+function getJstDateLabel() {
+  // 日本時間（JST）での「月/日」表示を返す。
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return `${jst.getUTCMonth() + 1}/${jst.getUTCDate()}`;
 }
 function freshBoxes(g) {
   return GAME_CONFIGS[g].names.map((name, i) => ({ name, icon: GAME_CONFIGS[g].icons[i], confirmedMiss: false }));
@@ -534,6 +550,7 @@ function renderChecker() {
   hist.innerHTML = s.history.length
     ? s.history.map(h => `
       <div class="hist-item">
+        <span style="color:var(--text-tertiary)">${h.date || ''}</span>
         <span>${h.turn}</span>
         <span style="font-weight:500;color:var(--text)">${h.box}</span>
         ${h.code ? '<span class="hi-code">🔑</span>' : ''}
@@ -549,7 +566,7 @@ function record(isHit) {
   if (codeMode && s.codeUsed) return;
   const idx = s.selected;
   const turnLabel = codeMode ? 'コード使用' : `${6 - s.remaining}回目`;
-  s.history.unshift({ box: s.boxes[idx].name, hit: isHit, turn: turnLabel, code: codeMode });
+  s.history.unshift({ box: s.boxes[idx].name, hit: isHit, turn: turnLabel, code: codeMode, date: getJstDateLabel() });
   s.remaining--;
   if (codeMode) { s.codeUsed = true; codeMode = false; }
   s.selected = null;
