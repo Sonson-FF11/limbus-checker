@@ -356,7 +356,9 @@ function getState(charId, gameId) {
   const ch = getChar(charId), week = getWeek();
   let s = ch.games[gameId];
   if (!s || s.week !== week) {
-    const co = s && s.remaining === 0 && !s.hitThisWeek;
+    // 前週にはずれ確定の箱が残っていれば、残り回数を使い切っていなくても
+    // その「外れ確定」情報を新しい週に引き継ぐ（当たりを引いていた場合を除く）。
+    const co = s && !s.hitThisWeek && s.boxes.some(b => b.confirmedMiss);
     ch.games[gameId] = { week, remaining: 5, boxes: co ? s.boxes.map(b => ({...b})) : freshBoxes(gameId), history: [], selected: null, hitThisWeek: false, carriedOver: co, codeUsed: false };
     save();
   }
