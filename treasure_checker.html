@@ -114,6 +114,17 @@ input[type="text"]:focus { border-color: #378add; }
 .char-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary); font-size: 14px; line-height: 1.8; }
 
+/* ===== リセット方式トグル ===== */
+.settings-row { background: var(--bg); border: 0.5px solid var(--border-md); border-radius: var(--radius-lg); padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.settings-label-wrap { min-width: 0; }
+.settings-label { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.settings-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.mode-toggle { display: flex; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; }
+.mode-toggle-btn { font-family: var(--font); font-size: 12px; padding: 6px 14px; border: none; background: var(--bg); color: var(--text-secondary); cursor: pointer; border-radius: 0; }
+.mode-toggle-btn:hover { background: var(--bg-secondary); }
+.mode-toggle-btn.active { background: var(--bg-info); color: var(--text-info); font-weight: 500; }
+.reset-due-badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: var(--radius-md); background: var(--bg-warn); color: var(--text-warn); margin-left: 6px; vertical-align: middle; }
+
 /* ===== フォーム ===== */
 .form-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; }
 .form-header h2 { font-size: 18px; font-weight: 500; }
@@ -203,6 +214,16 @@ input[type="text"]:focus { border-color: #378add; }
       <h2>リンバス宝箱チェッカー</h2>
       <button onclick="showAdd()">＋ キャラ追加</button>
     </div>
+    <div class="settings-row">
+      <div class="settings-label-wrap">
+        <div class="settings-label">週リセット方式</div>
+        <div class="settings-desc" id="reset-mode-desc"></div>
+      </div>
+      <div class="mode-toggle">
+        <button class="mode-toggle-btn" id="mode-auto-btn" onclick="setResetModeUI('auto')">自動</button>
+        <button class="mode-toggle-btn" id="mode-manual-btn" onclick="setResetModeUI('manual')">手動</button>
+      </div>
+    </div>
     <div id="confirm-wrap" style="display:none;background:rgba(0,0,0,0.4);border-radius:var(--radius-lg);align-items:center;justify-content:center;padding:2rem 1rem;margin-bottom:1rem">
     <div style="background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border-md);padding:1.5rem;width:100%;max-width:320px">
       <h3 style="font-size:15px;font-weight:500;margin-bottom:6px">キャラクターを削除</h3>
@@ -250,6 +271,7 @@ input[type="text"]:focus { border-color: #378add; }
     </div>
 
     <div class="banner" id="ck-banner">▶ 前週の外れ状態を引き継いでいます。</div>
+    <div class="banner" id="ck-needreset-banner" style="background:var(--bg-danger);color:var(--text-danger);">🔔 新しい週になりました。下の「週リセット」から今週分を開始してください。</div>
 
     <div class="code-banner" id="ck-code-banner">
       <span class="code-banner-text" id="ck-code-text"></span>
@@ -316,6 +338,7 @@ const GAME_CONFIGS = {
   apolion: { label: 'アポリオン', codeName: 'アポリオンコード', names: ['NW','SW','NE','SE'], icons: ['↖','↙','↗','↘'] }
 };
 const STORE_KEY = 'treasure_offline_v2';
+const RESET_MODE_KEY = 'treasure_reset_mode_v1';
 let chars = [], currentCharId = null, currentGame = 'temenas', editingId = null, codeMode = false;
 let selectedRace = null;
 
@@ -352,16 +375,40 @@ function load() { try { const r = localStorage.getItem(STORE_KEY); if (r) chars 
 function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(chars)); } catch(e) {} }
 function getChar(id) { return chars.find(c => c.id === id); }
 
+function getResetMode() {
+  try { const m = localStorage.getItem(RESET_MODE_KEY); return m === 'manual' ? 'manual' : 'auto'; } catch(e) { return 'auto'; }
+}
+function setResetModeUI(mode) {
+  try { localStorage.setItem(RESET_MODE_KEY, mode); } catch(e) {}
+  renderResetModeToggle();
+  renderList();
+}
+function renderResetModeToggle() {
+  const mode = getResetMode();
+  document.getElementById('mode-auto-btn').classList.toggle('active', mode === 'auto');
+  document.getElementById('mode-manual-btn').classList.toggle('active', mode === 'manual');
+  document.getElementById('reset-mode-desc').textContent = mode === 'auto'
+    ? '月曜になったら自動でリセットされます（外れ確定の箱は自動で引き継ぎ）。'
+    : '月曜になっても自動ではリセットされません。「週リセット」ボタンを押すまで前週の状態のままです。';
+}
+
 function getState(charId, gameId) {
   const ch = getChar(charId), week = getWeek();
   let s = ch.games[gameId];
-  if (!s || s.week !== week) {
+  if (!s) {
+    // 初回（そのキャラでまだ一度もこのゲームの状態がない）は常に新規作成する。
+    ch.games[gameId] = freshGameState(gameId);
+    save();
+  } else if (s.week !== week && getResetMode() === 'auto') {
+    // 自動リセット方式：週が変わったら自動でリセットする。
     // 前週にはずれ確定の箱が残っていれば、残り回数を使い切っていなくても
     // その「外れ確定」情報を新しい週に引き継ぐ（当たりを引いていた場合を除く）。
-    const co = s && !s.hitThisWeek && s.boxes.some(b => b.confirmedMiss);
+    const co = !s.hitThisWeek && s.boxes.some(b => b.confirmedMiss);
     ch.games[gameId] = { week, remaining: 5, boxes: co ? s.boxes.map(b => ({...b})) : freshBoxes(gameId), history: [], selected: null, hitThisWeek: false, carriedOver: co, codeUsed: false };
     save();
   }
+  // 手動リセット方式で週が変わっている場合は、ここでは何もしない。
+  // ユーザーが「週リセット」ボタンを押すまで前週の状態のまま保持する。
   if (ch.games[gameId].codeUsed === undefined) ch.games[gameId].codeUsed = false;
   return ch.games[gameId];
 }
@@ -370,7 +417,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
 }
-function showSelect() { codeMode = false; showScreen('select'); renderList(); }
+function showSelect() { codeMode = false; showScreen('select'); renderResetModeToggle(); renderList(); }
 function showAdd(id) {
   editingId = id || null;
   document.getElementById('add-title').textContent = id ? 'キャラクター編集' : 'キャラクター追加';
@@ -403,19 +450,23 @@ function renderList() {
     el.innerHTML = '<div class="empty-state">キャラクターがいません。<br>「キャラ追加」で登録してください。</div>';
     return;
   }
+  const week = getWeek();
   el.innerHTML = chars.map(ch => {
     const st = getState(ch.id, 'temenas'), sa = getState(ch.id, 'apolion');
     const tc = st.boxes.filter(b => !b.confirmedMiss).length;
     const ac = sa.boxes.filter(b => !b.confirmedMiss).length;
     const tcCode = !st.codeUsed ? ' 🔑' : '';
     const acCode = !sa.codeUsed ? ' 🔑' : '';
+    const tNeeds = st.week !== week, aNeeds = sa.week !== week;
+    const tRem = tNeeds ? '要リセット' : `残り${st.remaining}回・候補${tc}箱${tcCode}`;
+    const aRem = aNeeds ? '要リセット' : `残り${sa.remaining}回・候補${ac}箱${acCode}`;
     return `
       <div class="char-card" data-id="${ch.id}">
         <div class="char-avatar"><img src="${RACE_IMAGES[ch.race||'hume']}" alt="${ch.race||'hume'}" style="width:38px;height:38px;image-rendering:pixelated;border-radius:50%;object-fit:cover"></div>
         <div class="char-info">
           <div class="char-name">${ch.name}</div>
           <div class="char-race">${RACES.find(r=>r.id===(ch.race||'hume'))?.label||''}</div>
-          <div class="char-meta">テメナス 残り${st.remaining}回・候補${tc}箱${tcCode}　／　アポリオン 残り${sa.remaining}回・候補${ac}箱${acCode}</div>
+          <div class="char-meta">テメナス ${tRem}${tNeeds ? '<span class="reset-due-badge">🔔</span>' : ''}　／　アポリオン ${aRem}${aNeeds ? '<span class="reset-due-badge">🔔</span>' : ''}</div>
         </div>
         <div class="char-actions">
           <button class="edit-btn" data-id="${ch.id}">編集</button>
@@ -471,7 +522,7 @@ function switchGame(g) {
 
 function toggleCodeMode() {
   const s = getState(currentCharId, currentGame);
-  if (s.codeUsed || s.remaining <= 0) return;
+  if (s.week !== getWeek() || s.codeUsed || s.remaining <= 0) return;
   codeMode = !codeMode;
   if (codeMode) { s.selected = null; save(); }
   renderChecker();
@@ -479,9 +530,12 @@ function toggleCodeMode() {
 
 function renderChecker() {
   const ch = getChar(currentCharId), cfg = GAME_CONFIGS[currentGame], s = getState(currentCharId, currentGame);
+  const needsReset = s.week !== getWeek();
   document.getElementById('ck-char-name').textContent = ch.name;
-  document.getElementById('ck-rem').textContent = s.remaining + '回';
-  document.getElementById('ck-banner').style.display = s.carriedOver ? 'block' : 'none';
+  document.getElementById('ck-rem').textContent = needsReset ? '要リセット' : (s.remaining + '回');
+  document.getElementById('ck-banner').style.display = (s.carriedOver && !needsReset) ? 'block' : 'none';
+  document.getElementById('ck-needreset-banner').style.display = needsReset ? 'block' : 'none';
+  if (needsReset) codeMode = false;
 
   const codeBanner = document.getElementById('ck-code-banner');
   const codeText = document.getElementById('ck-code-text');
@@ -498,7 +552,7 @@ function renderChecker() {
   } else {
     codeBanner.className = 'code-banner available';
     codeText.textContent = `🔑 ${cfg.codeName}：未使用`;
-    codeBtn.disabled = false;
+    codeBtn.disabled = needsReset;
     if (codeMode) {
       codeBtn.textContent = 'キャンセル';
       modeInd.style.display = 'block';
@@ -510,7 +564,7 @@ function renderChecker() {
 
   const grid = document.getElementById('ck-grid');
   grid.innerHTML = '';
-  const canSelect = s.remaining > 0;
+  const canSelect = s.remaining > 0 && !needsReset;
   s.boxes.forEach((box, i) => {
     const card = document.createElement('div');
     let cls = 'box-card';
@@ -528,14 +582,16 @@ function renderChecker() {
   });
 
   const has = s.selected !== null;
-  const canAct = has && s.remaining > 0;
+  const canAct = has && s.remaining > 0 && !needsReset;
   const cands = s.boxes.filter(b => !b.confirmedMiss);
   const selectedIsOnlyCandidate = has && cands.length === 1 && cands[0] === s.boxes[s.selected];
   document.getElementById('ck-hit').disabled = !canAct;
   document.getElementById('ck-miss').disabled = !canAct || selectedIsOnlyCandidate;
 
   const adv = document.getElementById('ck-advice');
-  if (codeMode && s.selected === null) {
+  if (needsReset) {
+    adv.textContent = '新しい週になりました。「週リセット」ボタンを押して今週分を開始してください。';
+  } else if (codeMode && s.selected === null) {
     adv.textContent = `${cfg.codeName}使用中。残り回数を1回消費して箱を開けられます。開けたい箱を選んでください。`;
   } else if (codeMode && s.selected !== null) {
     adv.textContent = `「${s.boxes[s.selected].name}」をコードで開けます。残り回数が1回消費されます。`;
@@ -563,6 +619,7 @@ function renderChecker() {
 
 function record(isHit) {
   const s = getState(currentCharId, currentGame);
+  if (s.week !== getWeek()) return;
   if (s.selected === null) return;
   if (!codeMode && s.remaining <= 0) return;
   if (codeMode && s.codeUsed) return;
@@ -611,7 +668,7 @@ function doReset(carryover) {
   codeMode = false; save(); closeModal(); renderChecker();
 }
 
-load(); renderList();
+load(); renderResetModeToggle(); renderList();
 </script>
 </body>
 </html>
